@@ -1,0 +1,28 @@
+import pandas as pd
+import numpy as np
+
+DATA = "https://raw.githubusercontent.com/alexeygrigorev/mlbookcamp-code/master/chapter-02-car-price/data.csv"
+df = pd.read_csv(DATA)
+#df = pd.read_csv("data.csv")
+
+#task 1
+print(np.__version__)
+#task 2
+print(len(df))
+#task 3
+print(df.groupby("Make")["Make"].count().sort_values(ascending=False).head(3))
+#task 4
+#print(df.query("Make == 'Audi'").groupby("Make")["Model"].nunique())
+print(df[df.Make == 'Audi'].Model.nunique())
+#task 5
+print(df.isnull().any(axis=0))
+#task 6
+print(df["Engine Cylinders"].median())
+print(df["Engine Cylinders"].mode())
+print(df["Engine Cylinders"].fillna(df["Engine Cylinders"].mode()).median())
+#task 6
+y = [1100, 800, 750, 850, 1300, 1000, 1000, 1300, 800]
+X = df[df.Make == 'Lotus'][["Engine HP", "Engine Cylinders"]].drop_duplicates().to_numpy()
+XTX = np.dot(X.T, X)
+w = np.dot(np.dot(np.linalg.inv(XTX), X.T), y)
+print(w)
