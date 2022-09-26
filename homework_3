@@ -1,0 +1,72 @@
+import numpy as np
+import pandas as pd
+from kaggle.api.kaggle_api_extended import KaggleApi
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mutual_info_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.feature_extraction import DictVectorizer
+import zipfile
+
+#api = KaggleApi()
+#api.authenticate()
+#api.dataset_download_file('camnugent/california-housing-prices',
+#						  file_name='housing.csv',
+#						  path='./')
+
+list_of_columns = ['latitude', 'longitude', 'housing_median_age',
+				'total_rooms', 'total_bedrooms', 'population',
+				'households', 'median_income', 'median_house_value', 'ocean_proximity']
+parts_list = ['tr', 'val', 'test']
+ocean_proximity_list = [
+	"NEAR BAY",
+	"<1H OCEAN",
+	"INLAND",
+	"NEAR OCEAN"
+]
+ratio = dict(zip(parts_list, [.6, .2, .2]))
+df_raw = pd.read_csv(zipfile.ZipFile('housing.csv.zip', 'r').open('housing.csv'))[list_of_columns]
+df = df_raw.fillna(0)
+df["rooms_per_household"] = df["total_rooms"] / df["households"]
+df["bedrooms_per_room"] = df["total_bedrooms"] / df["total_rooms"]
+df["population_per_household"] = df["population"] / df["households"]
+#print(df.groupby("ocean_proximity")["ocean_proximity"].count().sort_values(ascending=False))
+
+
+target_full = df['median_house_value']
+data_full = df.sample(frac=1, random_state=42)
+data_full["above_average"] = \
+	np.where(data_full["median_house_value"] > data_full["median_house_value"].mean(), 1, 0)
+for group in ocean_proximity_list:
+	data_full[group] = (data_full["ocean_proximity"] == group).astype(int)
+data_full = data_full.drop(columns="ocean_proximity")
+
+#data_full = data_full.drop(columns="")
+target = dict.fromkeys(parts_list, 0)
+data = dict.fromkeys(parts_list, 0)
+
+data["tr"], data["val"], data["test"] = \
+	np.split(data_full.sample(frac=1), [int(ratio['tr']*len(data_full)), int((ratio['tr'] + ratio['val'])*len(data_full))])
+
+target["tr"], target["val"], target["test"] = \
+	np.split(target_full.sample(frac=1), [int(ratio['tr']*len(target_full)), int((ratio['tr'] + ratio['val'])*len(target_full))])
+
+dv = DictVectorizer(sparse=False)
+tr_dict = data["tr"].to_dict(orient='records')
+data["tr"] = dv.fit_transform(tr_dict)
+val_dict = data["val"].to_dict(orient='records')
+data["val"] = dv.transform(val_dict)
+
+#print(data['tr'].dtypes)
+#print(target['tr'])
+#print(np.corrcoef(data['tr'].drop(columns='ocean_proximity').values))
+#print(data["tr"].drop(columns='ocean_proximity').corr().to_string())
+data["tr"]["above_average"] = np.where(data["tr"]["median_house_value"] > data["tr"]["median_house_value"].mean(), 1, 0)
+print(round(mutual_info_score(data["tr"].ocean_proximity, data["tr"].above_average), 2))
+#print(target["tr"])
+
+reg = LogisticRegression(solver="liblinear", C=1.0, max_iter=1000, random_state=42)\
+	.fit(data["tr"], target["tr"])
+target_pred = reg.predict_proba(data["val"])[:, 1]
+churn_decision = (target_pred >= 0.5)
+print((target["val"] == churn_decision).mean())
+print(reg.score(data["val"], target["val"]))
